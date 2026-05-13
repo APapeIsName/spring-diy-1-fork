@@ -1,5 +1,6 @@
 package com.diy.framework.web.beans;
 
+import com.diy.app.AppConfig;
 import com.diy.framework.web.beans.factory.BeanScanner;
 import com.diy.framework.web.beans.factory.annotation.Autowired;
 import com.diy.framework.web.beans.factory.annotation.Bean;
@@ -7,30 +8,29 @@ import com.diy.framework.web.beans.factory.annotation.Component;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Parameter;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 
 public class ApplicationContext {
 
-    private final Set<Class<?>> beanClasses = new HashSet<>();
-    private final static Map<String, Object> beanMap = new ConcurrentHashMap<>();
-    private final BeanScanner beanScanner;
+    private Set<Class<?>> beanClasses = new HashSet<>();
+    private static final Map<String, Object> beanMap = new HashMap<>();
+    private BeanScanner beanScanner;
 
     public ApplicationContext(String... beanPackages) {
         beanScanner = new BeanScanner(beanPackages);
         init();
     }
 
-    public void init() {
+    private void init() {
         beanClasses.addAll(beanScanner.scanClassesTypeAnnotatedWith(Component.class));
-        for (Class<?> clazz : beanClasses) {
+        beanClasses.forEach(clazz -> {
             if (isBeanInitialized(clazz)) {
                 return;
             }
 
             Object bean = createInstance(clazz);
-            Map<String, Object> beanAnnotationMap = Arrays.stream(clazz.getMethods()).map(method -> {
-                Map<String, Object> tempBeanMap = new HashMap<>();
+            Arrays.stream(clazz.getMethods()).forEach(method -> {
                 boolean hasBean = method.isAnnotationPresent(Bean.class);
                 if (hasBean) {
                     String beanName = method.getDeclaredAnnotation(Bean.class).value();
@@ -39,17 +39,14 @@ public class ApplicationContext {
                     }
                     try {
                         Object methodResult = method.invoke(bean);
-                        beanClasses.add(methodResult.getClass());
-                        tempBeanMap.put(beanName, methodResult);
+                        saveBean(beanName, methodResult);
                     } catch (IllegalAccessException | InvocationTargetException e) {
                         throw new RuntimeException(e);
                     }
                 }
-                return tempBeanMap;
-            }).findFirst().get();
+            });
             saveBean(bean.getClass().getName(), bean);
-            saveBean(beanAnnotationMap);
-        }
+        });
     }
 
     public Object findBean(String beanName) {
@@ -99,7 +96,7 @@ public class ApplicationContext {
         List<Class<?>> parameterTypes = Arrays.stream(constructor.getParameterTypes()).toList();
 
         if (!beanClasses.containsAll(parameterTypes)) {
-            throw new RuntimeException("매개변수가 Bean이 아님 " + parameterTypes);
+            throw new RuntimeException("매개변수가 Bean이 아님");
         }
 
         return parameterTypes.stream().map(parameterType ->  {
@@ -120,10 +117,6 @@ public class ApplicationContext {
 
     private void saveBean(String beanName, Object bean) {
         beanMap.put(beanName, bean);
-    }
-
-    private void saveBean(Map<String, Object> addedBeanMap) {
-        beanMap.putAll(addedBeanMap);
     }
 
 //    public void register(Set<Class<?>> clazzSet) {
