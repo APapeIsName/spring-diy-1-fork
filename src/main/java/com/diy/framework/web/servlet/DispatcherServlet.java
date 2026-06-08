@@ -4,6 +4,7 @@ import com.diy.framework.beans.factory.BeanFactoryUtils;
 import com.diy.framework.context.ApplicationContext;
 import com.diy.framework.context.support.WebApplicationContextUtils;
 import com.diy.framework.core.Ordered;
+import com.diy.framework.web.interceptor.HandlerInterceptor;
 import com.diy.framework.web.mvc.view.ModelAndView;
 import com.diy.framework.web.mvc.view.View;
 import com.diy.framework.web.mvc.view.ViewResolver;
@@ -23,6 +24,7 @@ public class DispatcherServlet extends HttpServlet {
     private List<HandlerMapping> handlerMappings;
     private List<HandlerAdapter> handlerAdapters;
     private List<ViewResolver> viewResolvers;
+    private List<HandlerInterceptor> handlerInterceptors;
 
     @Override
     public void init() throws ServletException {
@@ -38,6 +40,7 @@ public class DispatcherServlet extends HttpServlet {
         initHandlerMappings(context);
         initHandlerAdapters(context);
         initViewResolvers(context);
+        initHandlerInterceptors(context);
     }
 
     private void initHandlerMappings(final ApplicationContext context) {
@@ -62,6 +65,12 @@ public class DispatcherServlet extends HttpServlet {
         this.viewResolvers.sort(Comparator.comparingInt(o -> ((Ordered) o).getOrder()));
     }
 
+    private void initHandlerInterceptors(final ApplicationContext context) {
+        final Map<String, HandlerInterceptor> matchingBeans =
+                BeanFactoryUtils.beansOfTypeIncludingAncestors(context, HandlerInterceptor.class);
+        this.handlerInterceptors = new ArrayList<>(matchingBeans.values());
+    }
+
     @Override
     protected void service(final HttpServletRequest req, final HttpServletResponse resp) throws ServletException, IOException {
         doDispatch(req, resp);
@@ -69,6 +78,8 @@ public class DispatcherServlet extends HttpServlet {
 
     private void doDispatch(final HttpServletRequest req, final HttpServletResponse resp) {
         try {
+            preHandle(req, resp);
+
             final Object handler = getHandler(req);
 
             final HandlerAdapter ha = getHandlerAdapter(handler);
@@ -77,9 +88,13 @@ public class DispatcherServlet extends HttpServlet {
 
             if (mv == null) return;
 
+            postHandle(req, resp, mv);
+
             render(mv, req, resp);
         } catch (Exception e) {
             throw new RuntimeException(e);
+        } finally {
+            afterCompletion(req, resp);
         }
     }
 
@@ -131,5 +146,17 @@ public class DispatcherServlet extends HttpServlet {
         }
 
         return null;
+    }
+
+    private void preHandle(final HttpServletRequest req, final HttpServletResponse resp) {
+        handlerInterceptors.forEach(interceptor -> interceptor.preHandle(req, resp));
+    }
+
+    private void postHandle(final HttpServletRequest req, final HttpServletResponse resp, ModelAndView mv) {
+        handlerInterceptors.forEach(interceptor -> interceptor.postHandle(req, resp, mv));
+    }
+
+    private void afterCompletion(final HttpServletRequest req, final HttpServletResponse resp) {
+        handlerInterceptors.forEach(interceptor -> interceptor.afterCompletion(req, resp));
     }
 }
