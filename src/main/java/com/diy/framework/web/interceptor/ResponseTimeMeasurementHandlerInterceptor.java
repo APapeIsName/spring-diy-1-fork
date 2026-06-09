@@ -1,5 +1,6 @@
 package com.diy.framework.web.interceptor;
 
+import com.diy.framework.context.annotation.Component;
 import com.diy.framework.web.mvc.view.ModelAndView;
 
 import javax.servlet.http.HttpServletRequest;
@@ -7,6 +8,7 @@ import javax.servlet.http.HttpServletResponse;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 
+@Component
 public class ResponseTimeMeasurementHandlerInterceptor implements HandlerInterceptor {
 
     private long preTime;

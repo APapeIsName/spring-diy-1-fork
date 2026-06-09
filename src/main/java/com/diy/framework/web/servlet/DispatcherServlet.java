@@ -76,7 +76,7 @@ public class DispatcherServlet extends HttpServlet {
         doDispatch(req, resp);
     }
 
-    private void doDispatch(final HttpServletRequest req, final HttpServletResponse resp) {
+    private void doDispatch(final HttpServletRequest req, final HttpServletResponse resp) throws IOException {
         try {
             preHandle(req, resp);
 
@@ -91,6 +91,9 @@ public class DispatcherServlet extends HttpServlet {
             postHandle(req, resp, mv);
 
             render(mv, req, resp);
+        } catch (IOException ioException) {
+            resp.sendError(401);
+            throw new IOException();
         } catch (Exception e) {
             throw new RuntimeException(e);
         } finally {
@@ -148,8 +151,10 @@ public class DispatcherServlet extends HttpServlet {
         return null;
     }
 
-    private void preHandle(final HttpServletRequest req, final HttpServletResponse resp) {
-        handlerInterceptors.forEach(interceptor -> interceptor.preHandle(req, resp));
+    private void preHandle(final HttpServletRequest req, final HttpServletResponse resp) throws IOException {
+        if (handlerInterceptors.stream().anyMatch(interceptor -> !interceptor.preHandle(req, resp))) {
+            resp.sendError(401);
+        }
     }
 
     private void postHandle(final HttpServletRequest req, final HttpServletResponse resp, ModelAndView mv) {

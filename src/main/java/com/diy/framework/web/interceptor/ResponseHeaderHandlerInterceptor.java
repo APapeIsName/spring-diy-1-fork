@@ -1,10 +1,12 @@
 package com.diy.framework.web.interceptor;
 
+import com.diy.framework.context.annotation.Component;
 import com.diy.framework.web.mvc.view.ModelAndView;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
+@Component
 public class ResponseHeaderHandlerInterceptor implements HandlerInterceptor {
     @Override
     public boolean preHandle(final HttpServletRequest req, final HttpServletResponse resp) {
