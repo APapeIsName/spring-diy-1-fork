@@ -4,6 +4,7 @@ import com.diy.framework.beans.factory.BeanFactoryUtils;
 import com.diy.framework.context.ApplicationContext;
 import com.diy.framework.context.support.WebApplicationContextUtils;
 import com.diy.framework.core.Ordered;
+import com.diy.framework.web.http.resolver.HandlerExceptionResolver;
 import com.diy.framework.web.interceptor.HandlerInterceptor;
 import com.diy.framework.web.mvc.view.ModelAndView;
 import com.diy.framework.web.mvc.view.View;
@@ -14,6 +15,7 @@ import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -25,6 +27,7 @@ public class DispatcherServlet extends HttpServlet {
     private List<HandlerAdapter> handlerAdapters;
     private List<ViewResolver> viewResolvers;
     private List<HandlerInterceptor> handlerInterceptors;
+    private List<HandlerExceptionResolver> handlerExceptionResolvers;
 
     @Override
     public void init() throws ServletException {
@@ -41,6 +44,7 @@ public class DispatcherServlet extends HttpServlet {
         initHandlerAdapters(context);
         initViewResolvers(context);
         initHandlerInterceptors(context);
+        initHandlerExceptionResolvers(context);
     }
 
     private void initHandlerMappings(final ApplicationContext context) {
@@ -71,16 +75,23 @@ public class DispatcherServlet extends HttpServlet {
         this.handlerInterceptors = new ArrayList<>(matchingBeans.values());
     }
 
+    private void initHandlerExceptionResolvers(final ApplicationContext context) {
+        final Map<String, HandlerExceptionResolver> matchingBeans =
+                BeanFactoryUtils.beansOfTypeIncludingAncestors(context, HandlerExceptionResolver.class);
+        this.handlerExceptionResolvers = new ArrayList<>(matchingBeans.values());
+    }
+
     @Override
     protected void service(final HttpServletRequest req, final HttpServletResponse resp) throws ServletException, IOException {
         doDispatch(req, resp);
     }
 
     private void doDispatch(final HttpServletRequest req, final HttpServletResponse resp) throws IOException {
+        Object handler = null;
         try {
             preHandle(req, resp);
 
-            final Object handler = getHandler(req);
+            handler = getHandler(req);
 
             final HandlerAdapter ha = getHandlerAdapter(handler);
 
@@ -91,11 +102,20 @@ public class DispatcherServlet extends HttpServlet {
             postHandle(req, resp, mv);
 
             render(mv, req, resp);
-        } catch (IOException ioException) {
-            resp.sendError(401);
-            throw new IOException();
         } catch (Exception e) {
-            throw new RuntimeException(e);
+            Exception exception = e;
+            if (exception instanceof InvocationTargetException) {
+                exception = (Exception) exception.getCause();
+            }
+            boolean caught = false;
+            for (HandlerExceptionResolver handlerExceptionResolver : handlerExceptionResolvers) {
+                ModelAndView modelAndView = handlerExceptionResolver.resolveException(req, resp, handler, exception);
+                if (modelAndView != null) {
+                    caught = true;
+                    break;
+                }
+            }
+            if (!caught) throw new RuntimeException(exception);
         } finally {
             afterCompletion(req, resp);
         }
@@ -153,7 +173,7 @@ public class DispatcherServlet extends HttpServlet {
 
     private void preHandle(final HttpServletRequest req, final HttpServletResponse resp) throws IOException {
         if (handlerInterceptors.stream().anyMatch(interceptor -> !interceptor.preHandle(req, resp))) {
-            resp.sendError(401);
+            resp.sendError(HttpServletResponse.SC_UNAUTHORIZED);
         }
     }
 

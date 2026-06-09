@@ -29,6 +29,7 @@ public class LectureRestController {
     @RequestMapping(value = "/api/lectures", methods = {RequestMethod.POST})
     public Lecture create(@RequestBody final Lecture lecture) {
         lecture.setId(100L);
+        lecture.validate();
         return lecture;
     }
 }
